@@ -11,6 +11,11 @@ import 'package:fijkplayer/fijkplayer.dart';
 // TODO: FFprobe native framerate for -re and -r flags to prevent frame dropping
 // TODO: Automatically pausing after a few minutes... Maybe -re would fix it?
 // TODO: Autostarting after load (probably have to check if enough data first)
+// _startAudioGeneration().then((_) async {
+//     // await Future.delayed(const Duration(milliseconds: 750));
+//     // await _videoPlayer.start();
+//     setState(() => _audioGenerationStarted = true);
+// });
 // TODO: Try audio players?
 // import 'package:audioplayers/audioplayers.dart';
 // import 'package:just_audio/just_audio.dart';
@@ -48,6 +53,9 @@ class _HomePageState extends State<HomePage> {
   String? _pipePath;
   FijkPlayer _videoPlayer = FijkPlayer();
   bool? _audioGenerationStarted;
+  double _amplitude = 1.0;
+  int _lowpass = 400;
+  String _color = "brown";
 
   @override
   void initState() {
@@ -69,7 +77,7 @@ class _HomePageState extends State<HomePage> {
     _pipePath = await FFmpegKitConfig.registerNewFFmpegPipe();
     print("[PRINT] FFmpeg file path: $_pipePath.aac");
     FFmpegSession session = await FFmpegKit.executeAsync(
-        '-y -f lavfi -i anoisesrc=color=brown:amplitude=0.8 -filter "lowpass=f=400" $_pipePath.aac');
+        '-y -f lavfi -i anoisesrc=color=$_color:amplitude=$_amplitude -filter "lowpass=f=$_lowpass" $_pipePath.aac');
 
     final returnCode = await session.getReturnCode();
     print("[PRINT] Return Code: $returnCode");
@@ -85,6 +93,8 @@ class _HomePageState extends State<HomePage> {
 
     String? fullOutput = await session.getOutput();
     _log = "$_log\n$fullOutput";
+    await _videoPlayer.reset();
+    _videoPlayer.stop(); // DO NOT AWAIT STOP
     await _videoPlayer.setDataSource('file://$_pipePath.aac');
     setState(() {});
   }
@@ -95,15 +105,14 @@ class _HomePageState extends State<HomePage> {
       _audioGenerationStarted = false;
     });
     _startAudioGeneration().then((_) => _audioGenerationStarted = true);
-    // _startAudioGeneration().then((_) async {
-    //     // await Future.delayed(const Duration(milliseconds: 750));
-    //     // await _videoPlayer.start();
-    //     setState(() => _audioGenerationStarted = true);
-    // });
   }
 
-  void _start() {
-    // Graphics
+  void _start(String? decibels) {
+    double? amplitude =
+        decibels == null ? _amplitude : double.tryParse(decibels.trim());
+    if (amplitude == null) return;
+    _amplitude = amplitude;
+    _load();
   }
 
   @override
@@ -130,10 +139,21 @@ class _HomePageState extends State<HomePage> {
                     : null,
             child: Text("Load"),
           ),
-          FilledButton(
-            onPressed: _start,
-            child: Text("Start Graphics"),
-          ),
+          Row(children: <Widget>[
+            Text(
+              "Amplitude (0.0 to 1.0):",
+              style: themeData.textTheme.headlineSmall!
+                  .merge(TextStyle(color: themeData.colorScheme.primary)),
+            ),
+            Container(
+              width: 100,
+              padding: EdgeInsets.only(left: 20),
+              child: TextField(
+                keyboardType: TextInputType.number,
+                onSubmitted: _start,
+              ),
+            ),
+          ]),
           Expanded(
               child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
